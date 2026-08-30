@@ -28,10 +28,11 @@ jobs:
               subprocess.run(["git","checkout","55b814873999c9ed18121712cf3a07fed295805e","--",str(path)],check=True)
           subprocess.run(["python","scripts/custom_week_dates.py"],check=True)
           subprocess.run(["python","scripts/modernize_ui.py"],check=True)
+          subprocess.run(["python","scripts/fast_entry.py"],check=True)
           if subprocess.run(["git","diff","--quiet","--",str(path)]).returncode!=0:
               subprocess.run(["git","config","user.name","github-actions[bot]"],check=True)
               subprocess.run(["git","config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
-              subprocess.run(["git","add",str(path)],check=True)
+              subprocess.run(["git","add","str(path)"],check=True)
               subprocess.run(["git","commit","-m","Modernize teacher dashboard and fast weekly grading [skip ci]"],check=True)
               subprocess.run(["git","push","origin","HEAD:main"],check=True)
 
