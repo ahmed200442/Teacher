@@ -14,50 +14,67 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Apply UI and assessment improvements
+      - name: Apply final assessment UI
         shell: python
         run: |
           from pathlib import Path
           import re
-          path=Path('app/src/main/java/com/ahmed/teacher/MainActivity.java')
-          s=path.read_text(encoding='utf-8')
+          p=Path('app/src/main/java/com/ahmed/teacher/MainActivity.java')
+          s=p.read_text(encoding='utf-8')
           s=s.replace('setPadding(dp(8),dp(8),dp(8),dp(8))','setPadding(dp(5),dp(5),dp(5),dp(5))')
           s=s.replace('x.setTextSize(15);x.setAllCaps(false);x.setOnClickListener(l);x.setTextColor(Color.rgb(25,45,90));x.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(52)));return x;', 'x.setTextSize(14);x.setAllCaps(false);x.setOnClickListener(l);x.setTextColor(Color.rgb(25,45,90));GradientDrawable bg=new GradientDrawable();bg.setColor(Color.WHITE);bg.setStroke(dp(1),Color.rgb(205,215,230));bg.setCornerRadius(dp(14));x.setBackground(bg);x.setElevation(dp(3));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(46));p.setMargins(0,dp(3),0,dp(3));x.setLayoutParams(p);return x;')
           s=s.replace('root.setPadding(dp(12),dp(12),dp(12),dp(20))','root.setPadding(dp(9),dp(7),dp(9),dp(10))')
-          s=s.replace('root.addView(tv("التقييمات الأسبوعية والحضور والدرجات",16));','root.addView(tv("إدارة التقييمات والحضور والطلاب بسهولة",15));')
           s=s.replace('إصدار 2026','الإصدار 1.1.0')
-          s=s.replace('    private String weekDate(){return prefs().getString(dateKey(),weekDates[weekIndex()]);}', '''    private String weekDate(){
-              String saved=prefs().getString(dateKey(),null);
-              if(saved!=null&&!saved.isEmpty()) return saved;
-              String today=new java.text.SimpleDateFormat("dd/MM/yyyy",Locale.US).format(new Date());
-              prefs().edit().putString(dateKey(),today).apply();
-              return today;
-          }''')
+          s=s.replace('private String weekDate(){return prefs().getString(dateKey(),weekDates[weekIndex()]);}', 'private String weekDate(){String saved=prefs().getString(dateKey(),null);if(saved!=null&&!saved.isEmpty())return saved;String today=new java.text.SimpleDateFormat("dd/MM/yyyy",Locale.US).format(new Date());prefs().edit().putString(dateKey(),today).apply();return today;}')
           s=s.replace('root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));','')
-          s=s.replace('TextView date=tv(week+"\\n📅 "+dayName(weekDate())+"  "+weekDate(),16);','TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),15);')
-          path.write_text(s,encoding='utf-8')
-          print('UI/date improvements applied')
-
+          s=re.sub(r'TextView date=tv\(week\+"\\\\n📅 ".*?\);date\.setBackground\(cardBg\(\)\);root\.addView\(date\);', 'TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),15);date.setBackground(cardBg());root.addView(date);', s, count=1)
+          # Replace the complete assessment screen with the four required items and delete-all control.
+          method='''    private void assessment(){
+        base("الصف "+grade+" - الفصل "+cls);
+        root.addView(tv("📝 التقييم الأسبوعي",20));
+        TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),15);date.setBackground(cardBg());root.addView(date);
+        LinearLayout nav=new LinearLayout(this);nav.setWeightSum(2);
+        Button prev=btn("‹ السابق",v->goPreviousWeek());Button next=btn("التالي ›",v->goNextWeek());
+        prev.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));next.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));nav.addView(prev);nav.addView(next);root.addView(nav);
+        boolean locked=isWeekLocked();root.addView(tv(locked?"🔒 التقييم مقفول":"✏️ التقييم مفتوح",14));
+        String[][] items={{"واجب منزلي","homework","5"},{"كراسة الحصة","notebook","5"},{"تقييم أسبوعي","weekly","10"},{"المواظبة والسلوك","behavior","5"}};
+        for(String[] item:items){
+            TextView h=tv(item[0]+"  •  "+item[2]+" درجات",15);h.setGravity(Gravity.RIGHT);h.setBackground(cardBg());root.addView(h);
+            for(String n:names){
+                LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView name=tv(n,13);name.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);name.setLayoutParams(new LinearLayout.LayoutParams(0,dp(44),1));row.addView(name);
+                EditText score=field("0-"+item[2],String.valueOf(savedScore(n,week,item[1])));score.setInputType(2);score.setGravity(Gravity.CENTER);score.setEnabled(!locked);score.setSelectAllOnFocus(false);score.setLayoutParams(new LinearLayout.LayoutParams(dp(62),dp(44)));row.addView(score);
+                final String student=n, part=item[1];
+                score.setOnEditorActionListener((v,a,e)->{saveScore(student,week,part,parseScore(score.getText().toString(),maxForPart(part)));return false;});
+                score.setOnFocusChangeListener((v,has)->{if(!has)saveScore(student,week,part,parseScore(score.getText().toString(),maxForPart(part)));});
+                row.setPadding(dp(2),dp(2),dp(2),dp(2));root.addView(row);
+            }
+        }
+        root.addView(btn("🗑 حذف درجات هذا الأسبوع للكل",v->confirmClearWeekScores()));
+        root.addView(btn(locked?"🔓 فتح التقييم للتعديل":"🔒 قفل التقييم الأسبوعي",v->{if(locked){setWeekLocked(false);assessment();}else{setWeekLocked(true);goNextWeek();}}));
+        root.addView(btn("⬅ رجوع للفصل",v->open(cls)));
+    }
+    private int maxForPart(String p){return "weekly".equals(p)?10:5;}
+    private int parseScore(String x,int max){try{return Math.max(0,Math.min(max,Integer.parseInt(x)));}catch(Exception e){return 0;}}
+    private void confirmClearWeekScores(){new AlertDialog.Builder(this).setTitle("⚠️ حذف درجات الأسبوع").setMessage("سيتم حذف درجات جميع الطلاب في هذا الأسبوع فقط.").setNegativeButton("إلغاء",null).setPositiveButton("حذف الكل",(d,w)->{String prefix="score_"+grade+"_"+cls+"_";SharedPreferences.Editor e=prefs().edit();for(String k:prefs().getAll().keySet())if(k.startsWith(prefix)&&k.endsWith("_"+week+"_homework")||k.startsWith(prefix)&&k.endsWith("_"+week+"_notebook")||k.startsWith(prefix)&&k.endsWith("_"+week+"_weekly")||k.startsWith(prefix)&&k.endsWith("_"+week+"_behavior"))e.remove(k);e.apply();assessment();}).show();}
+'''
+          s=re.sub(r'    private void assessment\(\)\{.*?\n    \}\n\n    private void monthly', method+'    private void monthly', s, count=1, flags=re.S)
+          p.write_text(s,encoding='utf-8')
+          print('Final assessment order and delete-all control applied')
       - name: Build debug APK
-        run: |
-          gradle clean assembleDebug --no-daemon --stacktrace --console=plain
-
-      - name: Verify and upload APK
+        run: gradle clean assembleDebug --no-daemon --stacktrace --console=plain
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
