@@ -129,16 +129,36 @@ public class MainActivity extends Activity {
     private String lockKey(){return "locked_"+grade+"_"+cls+"_"+week;}
     private boolean isWeekLocked(){return prefs().getBoolean(lockKey(),false);}
     private void setWeekLocked(boolean locked){prefs().edit().putBoolean(lockKey(),locked).apply();}
-
-    
     private int weekIndex(){for(int i=0;i<weeks.length;i++)if(weeks[i].equals(week))return i;return 0;}
     private String weekDate(){int i=weekIndex();return i<weekDates.length?weekDates[i]:"";}
     private String weekTitle(){return week+" • "+weekDate();}
+    private String weekSchedule(){
+        int i=weekIndex();
+        if(i<0||i>=weekDates.length)return "";
+        try{
+            java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US);
+            java.util.Date d=in.parse(weekDates[i]);
+            java.util.Calendar c=java.util.Calendar.getInstance(); c.setTime(d);
+            String[] days={"السبت","الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة"};
+            StringBuilder s=new StringBuilder("📅 ");
+            for(int j=0;j<7;j++){
+                if(j>0)s.append("  •  ");
+                s.append(days[j]).append(" ").append(in.format(c.getTime()));
+                c.add(java.util.Calendar.DAY_OF_MONTH,1);
+            }
+            return s.toString();
+        }catch(Exception e){return "📅 "+weekDate();}
+    }
     private void goPreviousWeek(){int i=weekIndex();if(i>0){week=weeks[i-1];assessment();}else Toast.makeText(this,"أنت بالفعل في الأسبوع الأول",Toast.LENGTH_SHORT).show();}
     private void goNextWeek(){int i=weekIndex();if(i<weeks.length-1){week=weeks[i+1];assessment();}else Toast.makeText(this,"هذا آخر أسبوع في القائمة",Toast.LENGTH_SHORT).show();}
 private void assessment(){
-        base("الصف "+grade+" - الفصل "+cls);root.addView(tv("التقييم الأسبوعي",20));
-        root.addView(tv("📅 "+weekTitle(),17));
+        base("الصف "+grade+" - الفصل "+cls);
+        root.addView(tv("التقييم الأسبوعي",20));
+        root.addView(tv("📌 "+weekTitle(),17));
+        TextView schedule=tv(weekSchedule(),14);
+        schedule.setGravity(Gravity.RIGHT);
+        schedule.setTextColor(Color.rgb(70,90,125));
+        root.addView(schedule);
         root.addView(tv("المجموع /25 تلقائي",15));
         Spinner weekSpinner=new Spinner(this);
         weekSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,weeks));
