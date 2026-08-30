@@ -4,59 +4,28 @@ import re
 path = Path("app/src/main/java/com/ahmed/teacher/MainActivity.java")
 text = path.read_text(encoding="utf-8")
 
-helpers = r'''private int weekIndex(){for(int i=0;i<weeks.length;i++)if(weeks[i].equals(week))return i;return 0;}
-    private String weekDate(){int i=weekIndex();return i<weekDates.length?weekDates[i]:"";}
-    private String weekTitle(){return week+" • "+weekDate();}
-    private String weekSchedule(){
-        int i=weekIndex();
-        if(i<0||i>=weekDates.length)return "";
-        try{
-            java.text.SimpleDateFormat in=new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US);
-            java.util.Date d=in.parse(weekDates[i]);
-            java.util.Calendar c=java.util.Calendar.getInstance(); c.setTime(d);
-            String[] days={"السبت","الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة"};
-            StringBuilder s=new StringBuilder("📅 ");
-            for(int j=0;j<7;j++){
-                if(j>0)s.append("  •  ");
-                s.append(days[j]).append(" ").append(in.format(c.getTime()));
-                c.add(java.util.Calendar.DAY_OF_MONTH,1);
-            }
-            return s.toString();
-        }catch(Exception e){return "📅 "+weekDate();}
-    }
-    private void goPreviousWeek(){int i=weekIndex();if(i>0){week=weeks[i-1];assessment();}else Toast.makeText(this,"أنت بالفعل في الأسبوع الأول",Toast.LENGTH_SHORT).show();}
-    private void goNextWeek(){int i=weekIndex();if(i<weeks.length-1){week=weeks[i+1];assessment();}else Toast.makeText(this,"هذا آخر أسبوع في القائمة",Toast.LENGTH_SHORT).show();}
-'''
+# Remove any fixed global weekly dates.
+text, n = re.subn(r'\s*// WEEK_DATES_2026:.*?private final String\[\] weekDates=.*?;', '', text, count=1, flags=re.S)
 
-text, n = re.subn(r'(?s)\s*private int weekIndex\(\).*?(?=private void assessment\(\))', '\n    ' + helpers, text, count=1)
-if n != 1:
-    raise SystemExit("weekly helper block not found")
+# Add dates that belong to the currently selected class and week.
+if 'private String dateKey(){return "assessment_date_"' not in text:
+    marker='private final String[] weeks='
+    p=text.find(marker); end=text.find(';',p)
+    if p<0 or end<0: raise SystemExit("weeks declaration not found")
+    helpers='''\n    private String dateKey(){return "assessment_date_"+grade+"_"+cls+"_"+weekIndex();}\n    private String savedWeekDate(){return prefs().getString(dateKey(),"");}\n    private void saveWeekDate(String value){prefs().edit().putString(dateKey(),value).apply();}\n    private String displayWeekDate(){String d=savedWeekDate();return d.isEmpty()?"لم يتم تحديد تاريخ التقييم":dayName(d)+" "+d;}\n    private String dayName(String value){try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US);java.util.Date d=f.parse(value);java.text.SimpleDateFormat df=new java.text.SimpleDateFormat("EEEE",new java.util.Locale("ar"));return df.format(d);}catch(Exception e){return "";}}\n    private void chooseWeekDate(){final java.util.Calendar c=java.util.Calendar.getInstance();String saved=savedWeekDate();if(!saved.isEmpty())try{c.setTime(new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US).parse(saved));}catch(Exception ignored){}android.app.DatePickerDialog dlg=new android.app.DatePickerDialog(this,(v,y,m,d)->{String s=String.format(java.util.Locale.US,"%02d/%02d/%04d",d,m+1,y);saveWeekDate(s);assessment();},c.get(java.util.Calendar.YEAR),c.get(java.util.Calendar.MONTH),c.get(java.util.Calendar.DAY_OF_MONTH));dlg.setTitle("تاريخ تقييم "+week+" - الصف "+grade+" الفصل "+cls);dlg.show();}\n'''
+    text=text[:end+1]+helpers+text[end+1:]
 
-header = r'''private void assessment(){
-        base("الصف "+grade+" - الفصل "+cls);
-        root.addView(tv("التقييم الأسبوعي",20));
-        root.addView(tv("📌 "+weekTitle(),17));
-        TextView schedule=tv(weekSchedule(),14);
-        schedule.setGravity(Gravity.RIGHT);
-        schedule.setTextColor(Color.rgb(70,90,125));
-        root.addView(schedule);
-        root.addView(tv("المجموع /25 تلقائي",15));'''
+# Replace old fixed date helpers if present.
+text=re.sub(r'\s*private String weekDate\(\).*?private String weekTitle\(\)\{.*?\}', '\n    private String weekTitle(){return week+" • "+displayWeekDate();}', text, count=1, flags=re.S)
+# If weekTitle wasn't found, add it before assessment.
+if 'private String weekTitle(){return week+" • "+displayWeekDate();}' not in text:
+    pos=text.find('private void assessment()')
+    text=text[:pos]+'    private String weekTitle(){return week+" • "+displayWeekDate();}\n'+text[pos:]
 
-text, n = re.subn(
-    r'(?s)private void assessment\(\)\{.*?root\.addView\(tv\("المجموع /25 تلقائي",15\)\);',
-    header,
-    text,
-    count=1,
-)
-if n != 1:
-    raise SystemExit("assessment header not found")
+# Add the automatic current-class date display and date picker button.
+needle='root.addView(tv("📌 "+weekTitle(),17));'
+if needle in text and 'تحديد / تغيير تاريخ التقييم' not in text:
+    text=text.replace(needle,needle+'\n        root.addView(btn("📅 تحديد / تغيير تاريخ التقييم",v->chooseWeekDate()));',1)
 
-old = 'setWeekLocked(true);Toast.makeText(this,"تم قفل "+week+" بتاريخ "+weekDate(),Toast.LENGTH_SHORT).show();goNextWeek();'
-new = old
-if old not in text:
-    old2 = 'setWeekLocked(true);assessment();Toast.makeText(this,"تم قفل "+week,Toast.LENGTH_SHORT).show();'
-    if old2 in text:
-        text = text.replace(old2, new, 1)
-
-path.write_text(text, encoding="utf-8")
-print("Weekly assessment schedule patched successfully")
+path.write_text(text,encoding="utf-8")
+print("Per-class weekly assessment dates patched successfully")
