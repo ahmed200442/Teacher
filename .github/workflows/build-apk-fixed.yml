@@ -34,6 +34,36 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Fix assessment dates before build
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/src/main/java/com/ahmed/teacher/MainActivity.java")
+          s = path.read_text(encoding="utf-8")
+
+          old_date = '    private String weekDate(){return prefs().getString(dateKey(),weekDates[weekIndex()]);}'
+          new_date = '''    private String weekDate(){
+              String saved=prefs().getString(dateKey(),null);
+              if(saved!=null&&!saved.isEmpty()) return saved;
+              java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd/MM/yyyy",Locale.US);
+              String today=f.format(new Date());
+              prefs().edit().putString(dateKey(),today).apply();
+              return today;
+          }'''
+          if old_date not in s:
+              raise SystemExit("Expected weekDate method was not found")
+          s = s.replace(old_date, new_date, 1)
+
+          old_card = '        TextView date=tv(week+"\\n📅 "+dayName(weekDate())+"  "+weekDate(),16);date.setBackground(cardBg());root.addView(date);\n        root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));'
+          new_card = '        TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),16);date.setBackground(cardBg());root.addView(date);'
+          if old_card not in s:
+              raise SystemExit("Expected assessment date card was not found")
+          s = s.replace(old_card, new_card, 1)
+
+          path.write_text(s, encoding="utf-8")
+          print("Assessment dates fixed: each week gets the actual date when first recorded.")
+
       - name: Build debug APK with diagnostics
         run: |
           gradle clean assembleDebug --no-daemon --stacktrace --info --console=plain
