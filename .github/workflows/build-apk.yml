@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -12,6 +15,64 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore and update teacher source
+        shell: python
+        run: |
+          import re
+          import subprocess
+          from pathlib import Path
+
+          path = Path("app/src/main/java/com/ahmed/teacher/MainActivity.java")
+          text = path.read_text(encoding="utf-8") if path.exists() else ""
+
+          # The previous update accidentally replaced the activity with a placeholder.
+          # Restore the last known-good student-management version before applying this change.
+          if "public class MainActivity {\\n}" in text or len(text) < 1000:
+              subprocess.run([
+                  "git", "checkout",
+                  "55b814873999c9ed18121712cf3a07fed295805e",
+                  "--",
+                  str(path)
+              ], check=True)
+              text = path.read_text(encoding="utf-8")
+
+          if "WEEK_DATES_2026" not in text:
+              date_array = '''    // WEEK_DATES_2026: official school-year start 12/09/2026, one week apart
+              private final String[] weekDates={"12/09/2026","19/09/2026","26/09/2026","03/10/2026","10/10/2026","17/10/2026","24/10/2026","31/10/2026","07/11/2026","14/11/2026","21/11/2026","28/11/2026","05/12/2026","12/12/2026","19/12/2026","26/12/2026","02/01/2027","09/01/2027"};\n\n'''
+              text = text.replace(
+                  '    private final String[] weeks={"الأسبوع الأول","الأسبوع الثاني","الأسبوع الثالث","الأسبوع الرابع","الأسبوع الخامس","الأسبوع السادس","الأسبوع السابع","الأسبوع الثامن","الأسبوع التاسع","الأسبوع العاشر","الأسبوع الحادي عشر","الأسبوع الثاني عشر","الأسبوع الثالث عشر","الأسبوع الرابع عشر","الأسبوع الخامس عشر","الأسبوع السادس عشر","الأسبوع السابع عشر","الأسبوع الثامن عشر"};\n',
+                  '    private final String[] weeks={"الأسبوع الأول","الأسبوع الثاني","الأسبوع الثالث","الأسبوع الرابع","الأسبوع الخامس","الأسبوع السادس","الأسبوع السابع","الأسبوع الثامن","الأسبوع التاسع","الأسبوع العاشر","الأسبوع الحادي عشر","الأسبوع الثاني عشر","الأسبوع الثالث عشر","الأسبوع الرابع عشر","الأسبوع الخامس عشر","الأسبوع السادس عشر","الأسبوع السابع عشر","الأسبوع الثامن عشر"};\n' + date_array
+              )
+
+              helpers = '''    private int weekIndex(){ for(int i=0;i<weeks.length;i++) if(weeks[i].equals(week)) return i; return 0; }\n    private String weekDate(){ int i=weekIndex(); return i<weekDates.length?weekDates[i]:""; }\n    private String weekTitle(){ return week+" • "+weekDate(); }\n    private void goPreviousWeek(){ int i=weekIndex(); if(i>0){week=weeks[i-1];assessment();} else Toast.makeText(this,"أنت بالفعل في الأسبوع الأول",Toast.LENGTH_SHORT).show(); }\n    private void goNextWeek(){ int i=weekIndex(); if(i<weeks.length-1){week=weeks[i+1];assessment();} else Toast.makeText(this,"هذا آخر أسبوع في القائمة",Toast.LENGTH_SHORT).show(); }\n\n'''
+              text = text.replace('    private void assessment() {\n', helpers + '    private void assessment() {\n', 1)
+
+              old_header = '''        base("الصف "+grade+" - الفصل "+cls); root.addView(tv(week,20));\n        root.addView(tv("التقييم الأسبوعي • المجموع /25 تلقائي",16));\n'''
+              new_header = '''        base("الصف "+grade+" - الفصل "+cls);\n        root.addView(tv("التقييم الأسبوعي",20));\n        root.addView(tv("📅 "+weekTitle(),17));\n        root.addView(tv("المجموع /25 تلقائي",15));\n        Spinner weekSpinner=new Spinner(this);\n        weekSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,weeks));\n        weekSpinner.setSelection(weekIndex());\n        weekSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){\n            public void onNothingSelected(android.widget.AdapterView<?> p){}\n            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){ if(!weeks[pos].equals(week)){week=weeks[pos];assessment();} }\n        });\n        root.addView(weekSpinner);\n        LinearLayout weekNav=new LinearLayout(this);\n        weekNav.setOrientation(LinearLayout.HORIZONTAL);\n        weekNav.setGravity(Gravity.CENTER);\n        Button prev=btn("⬅ الأسبوع السابق",v->goPreviousWeek());\n        Button next=btn("الأسبوع التالي ➡",v->goNextWeek());\n        prev.setLayoutParams(new LinearLayout.LayoutParams(0,dp(52),1));\n        next.setLayoutParams(new LinearLayout.LayoutParams(0,dp(52),1));\n        weekNav.addView(prev);weekNav.addView(next);root.addView(weekNav);\n        root.addView(tv("💾 الحفظ التلقائي يعمل مع كل درجة",13));\n'''
+              if old_header in text:
+                  text = text.replace(old_header,new_header,1)
+              else:
+                  raise SystemExit("assessment header not found")
+
+              old_lock = '''    private void confirmLock() {\n        new AlertDialog.Builder(this).setTitle("🔒 قفل التقييم الأسبوعي")\n            .setMessage("بعد القفل لن تستطيع تعديل درجات هذا الأسبوع حتى تختار فتح التقييم مرة أخرى. هل تريد القفل؟")\n            .setNegativeButton("إلغاء",null).setPositiveButton("قفل",(d,w)->{setWeekLocked(true);assessment();Toast.makeText(this,"تم قفل "+week,Toast.LENGTH_SHORT).show();}).show();\n    }\n'''
+              new_lock = '''    private void confirmLock() {\n        new AlertDialog.Builder(this).setTitle("🔒 قفل التقييم الأسبوعي")\n            .setMessage("بعد القفل لن تستطيع تعديل درجات هذا الأسبوع حتى تختار فتح التقييم مرة أخرى. هل تريد القفل؟")\n            .setNegativeButton("إلغاء",null).setPositiveButton("قفل",(d,w)->{\n                setWeekLocked(true);\n                Toast.makeText(this,"تم قفل "+week+" بتاريخ "+weekDate(),Toast.LENGTH_SHORT).show();\n                goNextWeek();\n            }).show();\n    }\n'''
+              if old_lock in text:
+                  text = text.replace(old_lock,new_lock,1)
+              else:
+                  raise SystemExit("confirmLock block not found")
+
+              path.write_text(text,encoding="utf-8")
+
+          changed = subprocess.run(["git","diff","--quiet","--",str(path)]).returncode != 0
+          if changed:
+              subprocess.run(["git","config","user.name","github-actions[bot]"],check=True)
+              subprocess.run(["git","config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
+              subprocess.run(["git","add",str(path)],check=True)
+              subprocess.run(["git","commit","-m","Add weekly dates and automatic next-week navigation [skip ci]"],check=True)
+              subprocess.run(["git","push","origin","HEAD:main"],check=True)
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
