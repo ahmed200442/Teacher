@@ -17,6 +17,9 @@ public class MainActivity extends Activity {
     private String week="الأسبوع الأول";
     private ArrayList<String> names=new ArrayList<>();
     private final String[] weeks={"الأسبوع الأول","الأسبوع الثاني","الأسبوع الثالث","الأسبوع الرابع","الأسبوع الخامس","الأسبوع السادس","الأسبوع السابع","الأسبوع الثامن","الأسبوع التاسع","الأسبوع العاشر","الأسبوع الحادي عشر","الأسبوع الثاني عشر","الأسبوع الثالث عشر","الأسبوع الرابع عشر","الأسبوع الخامس عشر","الأسبوع السادس عشر","الأسبوع السابع عشر","الأسبوع الثامن عشر"};
+    // WEEK_DATES_2026: official school-year start 12/09/2026, one week apart
+    private final String[] weekDates={"12/09/2026","19/09/2026","26/09/2026","03/10/2026","10/10/2026","17/10/2026","24/10/2026","31/10/2026","07/11/2026","14/11/2026","21/11/2026","28/11/2026","05/12/2026","12/12/2026","19/12/2026","26/12/2026","02/01/2027","09/01/2027"};
+
 
     private int dp(float v){return(int)(v*getResources().getDisplayMetrics().density+.5f);}
     private TextView tv(String s,float z){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(Color.rgb(25,45,90));t.setGravity(Gravity.CENTER);t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);t.setPadding(dp(8),dp(8),dp(8),dp(8));return t;}
@@ -127,8 +130,32 @@ public class MainActivity extends Activity {
     private boolean isWeekLocked(){return prefs().getBoolean(lockKey(),false);}
     private void setWeekLocked(boolean locked){prefs().edit().putBoolean(lockKey(),locked).apply();}
 
-    private void assessment(){
-        base("الصف "+grade+" - الفصل "+cls);root.addView(tv(week,20));root.addView(tv("التقييم الأسبوعي • المجموع /25 تلقائي",16));
+    
+    private int weekIndex(){for(int i=0;i<weeks.length;i++)if(weeks[i].equals(week))return i;return 0;}
+    private String weekDate(){int i=weekIndex();return i<weekDates.length?weekDates[i]:"";}
+    private String weekTitle(){return week+" • "+weekDate();}
+    private void goPreviousWeek(){int i=weekIndex();if(i>0){week=weeks[i-1];assessment();}else Toast.makeText(this,"أنت بالفعل في الأسبوع الأول",Toast.LENGTH_SHORT).show();}
+    private void goNextWeek(){int i=weekIndex();if(i<weeks.length-1){week=weeks[i+1];assessment();}else Toast.makeText(this,"هذا آخر أسبوع في القائمة",Toast.LENGTH_SHORT).show();}
+private void assessment(){
+        base("الصف "+grade+" - الفصل "+cls);root.addView(tv("التقييم الأسبوعي",20));
+        root.addView(tv("📅 "+weekTitle(),17));
+        root.addView(tv("المجموع /25 تلقائي",15));
+        Spinner weekSpinner=new Spinner(this);
+        weekSpinner.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,weeks));
+        weekSpinner.setSelection(weekIndex());
+        weekSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            public void onNothingSelected(android.widget.AdapterView<?> p){}
+            public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){if(!weeks[pos].equals(week)){week=weeks[pos];assessment();}}
+        });
+        root.addView(weekSpinner);
+        LinearLayout weekNav=new LinearLayout(this);
+        weekNav.setOrientation(LinearLayout.HORIZONTAL);
+        weekNav.setGravity(Gravity.CENTER);
+        Button prev=btn("⬅ الأسبوع السابق",v->goPreviousWeek());
+        Button next=btn("الأسبوع التالي ➡",v->goNextWeek());
+        prev.setLayoutParams(new LinearLayout.LayoutParams(0,dp(52),1));
+        next.setLayoutParams(new LinearLayout.LayoutParams(0,dp(52),1));
+        weekNav.addView(prev);weekNav.addView(next);root.addView(weekNav);root.addView(tv("التقييم الأسبوعي • المجموع /25 تلقائي",16));
         TextView auto=tv("💾 الحفظ التلقائي يعمل مع كل درجة",13);auto.setTextColor(Color.rgb(35,135,80));root.addView(auto);
         final boolean locked=isWeekLocked();
         TextView state=tv(locked?"🔒 التقييم مقفول ولا يمكن تعديل الدرجات":"✏️ التقييم مفتوح ويمكن إدخال الدرجات",13);state.setTextColor(locked?Color.rgb(190,70,70):Color.rgb(55,105,155));root.addView(state);
@@ -140,7 +167,7 @@ public class MainActivity extends Activity {
         root.addView(btn("💾 حفظ الأسبوع",v->Toast.makeText(this,"الدرجات محفوظة تلقائيًا بالفعل",Toast.LENGTH_SHORT).show()));
         root.addView(btn("📤 تصدير Excel",v->exportExcel()));root.addView(btn("🖨 طباعة",v->printReport()));
     }
-    private void confirmLock(){new AlertDialog.Builder(this).setTitle("🔒 قفل التقييم الأسبوعي").setMessage("بعد القفل لن تستطيع تعديل درجات هذا الأسبوع حتى تختار فتح التقييم مرة أخرى. هل تريد القفل؟").setNegativeButton("إلغاء",null).setPositiveButton("قفل",(d,w)->{setWeekLocked(true);assessment();Toast.makeText(this,"تم قفل "+week,Toast.LENGTH_SHORT).show();}).show();}
+    private void confirmLock(){new AlertDialog.Builder(this).setTitle("🔒 قفل التقييم الأسبوعي").setMessage("بعد القفل لن تستطيع تعديل درجات هذا الأسبوع حتى تختار فتح التقييم مرة أخرى. هل تريد القفل؟").setNegativeButton("إلغاء",null).setPositiveButton("قفل",(d,w)->{setWeekLocked(true);Toast.makeText(this,"تم قفل "+week+" بتاريخ "+weekDate(),Toast.LENGTH_SHORT).show();goNextWeek();}).show();}
     private void confirmUnlock(){new AlertDialog.Builder(this).setTitle("🔓 فتح التقييم").setMessage("سيتم السماح بتعديل درجات هذا الأسبوع مرة أخرى.").setNegativeButton("إلغاء",null).setPositiveButton("فتح",(d,w)->{setWeekLocked(false);assessment();Toast.makeText(this,"تم فتح "+week+" للتعديل",Toast.LENGTH_SHORT).show();}).show();}
 
     private void addStudent(String n,boolean locked){
