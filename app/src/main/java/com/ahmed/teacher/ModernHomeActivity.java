@@ -51,5 +51,5 @@ public class ModernHomeActivity extends Activity {
         gap(root,18); root.addView(text("تقييمات أسبوعية • حفظ تلقائي • حساب المجموع • حضور وغياب",11,muted,false));
         setContentView(scroll);
     }
-    private void openMain(){ startActivity(new Intent(this,MainActivity.class)); }
+    private void openMain(){ startActivity(new Intent(this,ModernMainActivity.class)); }
 }
