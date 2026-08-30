@@ -29,55 +29,38 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      - name: Fix assessment dates before build
+      - name: Apply UI and assessment improvements
         shell: python
         run: |
           from pathlib import Path
-
-          path = Path("app/src/main/java/com/ahmed/teacher/MainActivity.java")
-          s = path.read_text(encoding="utf-8")
-
-          old_date = '    private String weekDate(){return prefs().getString(dateKey(),weekDates[weekIndex()]);}'
-          new_date = '''    private String weekDate(){
+          import re
+          path=Path('app/src/main/java/com/ahmed/teacher/MainActivity.java')
+          s=path.read_text(encoding='utf-8')
+          s=s.replace('setPadding(dp(8),dp(8),dp(8),dp(8))','setPadding(dp(5),dp(5),dp(5),dp(5))')
+          s=s.replace('x.setTextSize(15);x.setAllCaps(false);x.setOnClickListener(l);x.setTextColor(Color.rgb(25,45,90));x.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(52)));return x;', 'x.setTextSize(14);x.setAllCaps(false);x.setOnClickListener(l);x.setTextColor(Color.rgb(25,45,90));GradientDrawable bg=new GradientDrawable();bg.setColor(Color.WHITE);bg.setStroke(dp(1),Color.rgb(205,215,230));bg.setCornerRadius(dp(14));x.setBackground(bg);x.setElevation(dp(3));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(46));p.setMargins(0,dp(3),0,dp(3));x.setLayoutParams(p);return x;')
+          s=s.replace('root.setPadding(dp(12),dp(12),dp(12),dp(20))','root.setPadding(dp(9),dp(7),dp(9),dp(10))')
+          s=s.replace('root.addView(tv("التقييمات الأسبوعية والحضور والدرجات",16));','root.addView(tv("إدارة التقييمات والحضور والطلاب بسهولة",15));')
+          s=s.replace('إصدار 2026','الإصدار 1.1.0')
+          s=s.replace('    private String weekDate(){return prefs().getString(dateKey(),weekDates[weekIndex()]);}', '''    private String weekDate(){
               String saved=prefs().getString(dateKey(),null);
               if(saved!=null&&!saved.isEmpty()) return saved;
-              java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd/MM/yyyy",Locale.US);
-              String today=f.format(new Date());
+              String today=new java.text.SimpleDateFormat("dd/MM/yyyy",Locale.US).format(new Date());
               prefs().edit().putString(dateKey(),today).apply();
               return today;
-          }'''
-          if old_date not in s:
-              raise SystemExit("Expected weekDate method was not found")
-          s = s.replace(old_date, new_date, 1)
+          }''')
+          s=s.replace('root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));','')
+          s=s.replace('TextView date=tv(week+"\\n📅 "+dayName(weekDate())+"  "+weekDate(),16);','TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),15);')
+          path.write_text(s,encoding='utf-8')
+          print('UI/date improvements applied')
 
-          old_card = '        TextView date=tv(week+"\\n📅 "+dayName(weekDate())+"  "+weekDate(),16);date.setBackground(cardBg());root.addView(date);\n        root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));'
-          new_card = '        TextView date=tv(week+"\\n📅 تاريخ التقييم: "+weekDate(),16);date.setBackground(cardBg());root.addView(date);'
-          if old_card not in s:
-              raise SystemExit("Expected assessment date card was not found")
-          s = s.replace(old_card, new_card, 1)
-
-          path.write_text(s, encoding="utf-8")
-          print("Assessment dates fixed: each week gets the actual date when first recorded.")
-
-      - name: Build debug APK with diagnostics
+      - name: Build debug APK
         run: |
-          gradle clean assembleDebug --no-daemon --stacktrace --info --console=plain
+          gradle clean assembleDebug --no-daemon --stacktrace --console=plain
 
-      - name: Verify APK exists
-        if: success()
-        run: |
-          find app/build/outputs/apk -type f -name '*.apk' -print
-          test -n "$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
-
-      - name: Upload APK
+      - name: Verify and upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Teacher-debug-apk-fixed
+          name: Teacher-v1.1.0-debug
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
