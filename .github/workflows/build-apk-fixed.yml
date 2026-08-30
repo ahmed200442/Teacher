@@ -5,32 +5,15 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Apply robust current UI patches
-        shell: python
-        run: |
-          import re
-          from pathlib import Path
-          p=Path('app/src/main/java/com/ahmed/teacher/MainActivity.java')
-          t=p.read_text(encoding='utf-8')
-          start=t.find('    private int weekIndex()')
-          end=t.find('    private void goPreviousWeek()', start)
-          if start < 0 or end < 0:
-              raise SystemExit('week navigation block not found')
-          block='''    private int weekIndex(){for(int i=0;i<weeks.length;i++)if(weeks[i].equals(week))return i;return 0;}\n    private String dateKey(){return "weekdate_"+grade+"_"+cls+"_"+weekIndex();}\n    private String weekDate(){return prefs().getString(dateKey(),"");}\n    private String dayName(String date){if(date==null||date.isEmpty())return "";try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US);java.util.Date d=f.parse(date);java.util.Calendar c=java.util.Calendar.getInstance();c.setTime(d);String[] days={"الأحد","الإثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"};return days[c.get(java.util.Calendar.DAY_OF_WEEK)-1];}catch(Exception e){return "";}}\n    private String weekTitle(){String d=weekDate();return week+(d.isEmpty()?"":" • "+dayName(d)+" "+d);}\n    private void chooseWeekDate(){String old=weekDate();java.util.Calendar cal=java.util.Calendar.getInstance();if(!old.isEmpty())try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("dd/MM/yyyy",java.util.Locale.US);cal.setTime(f.parse(old));}catch(Exception ignored){}DatePickerDialog dp=new DatePickerDialog(this,(view,y,m,day)->{String d=String.format(java.util.Locale.US,"%02d/%02d/%04d",day,m+1,y);prefs().edit().putString(dateKey(),d).apply();assessment();},cal.get(java.util.Calendar.YEAR),cal.get(java.util.Calendar.MONTH),cal.get(java.util.Calendar.DAY_OF_MONTH));dp.setTitle("تحديد تاريخ التقييم - "+week);dp.show();}\n'''
-          t=t[:start]+block+t[end:]
-          t=re.sub(r'\s*// WEEK_DATES_2026:.*?\n\s*private final String\[\] weekDates=\{.*?\};\n','\n',t,count=1,flags=re.S)
-          p.write_text(t,encoding='utf-8')
-      - name: Apply modern dashboard and grading UI
-        run: python scripts/modernize_ui.py
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
