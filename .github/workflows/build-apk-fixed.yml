@@ -29,6 +29,9 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Apply final grading updates
+        run: python3 scripts/apply_final_updates.py
+
       - name: Build debug APK
         run: |
           gradle clean assembleDebug --no-daemon --stacktrace --console=plain
