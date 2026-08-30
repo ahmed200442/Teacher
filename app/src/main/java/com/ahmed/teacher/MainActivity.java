@@ -62,41 +62,78 @@ public class MainActivity extends Activity {
     private void chooseDate(){try{String[] p=weekDate().split("/");DatePickerDialog dlg=new DatePickerDialog(this,(v,y,m,d)->{String s=String.format(Locale.US,"%02d/%02d/%04d",d,m+1,y);prefs().edit().putString(dateKey(),s).apply();assessment();},Integer.parseInt(p[2]),Integer.parseInt(p[1])-1,Integer.parseInt(p[0]));dlg.show();}catch(Exception e){Toast.makeText(this,"تعذر اختيار التاريخ",Toast.LENGTH_SHORT).show();}}
     private void goPreviousWeek(){int i=weekIndex();if(i>0){week=weeks[i-1];assessment();}else Toast.makeText(this,"أنت في الأسبوع الأول",Toast.LENGTH_SHORT).show();}
     private void goNextWeek(){int i=weekIndex();if(i<weeks.length-1){week=weeks[i+1];assessment();}else Toast.makeText(this,"هذا آخر أسبوع",Toast.LENGTH_SHORT).show();}
-    private void assessment(){base("الصف "+grade+" - الفصل "+cls);root.addView(tv("📝 التقييم الأسبوعي",21));TextView date=tv(week+"\n📅 "+dayName(weekDate())+"  "+weekDate(),16);date.setBackground(cardBg());root.addView(date);root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));Spinner ws=new Spinner(this);ws.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,weeks));ws.setSelection(weekIndex());ws.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?> p){}public void onItemSelected(AdapterView<?> p,View v,int pos,long id){if(!weeks[pos].equals(week)){week=weeks[pos];assessment();}}});root.addView(ws);LinearLayout nav=new LinearLayout(this);nav.setWeightSum(2);Button prev=btn("⬅ السابق",v->goPreviousWeek());Button next=btn("التالي ➡",v->goNextWeek());prev.setLayoutParams(new LinearLayout.LayoutParams(0,dp(50),1));next.setLayoutParams(new LinearLayout.LayoutParams(0,dp(50),1));nav.addView(prev);nav.addView(next);root.addView(nav);final boolean locked=isWeekLocked();TextView state=tv(locked?"🔒 التقييم مقفول":"✏️ التقييم مفتوح • الحفظ تلقائي",14);state.setTextColor(locked?Color.rgb(190,70,70):Color.rgb(35,130,80));root.addView(state);root.addView(btn(locked?"🔓 فتح التقييم للتعديل":"🔒 قفل التقييم الأسبوعي",v->{if(locked)confirmUnlock();else confirmLock();}));root.addView(tv("درجات التقييم • اكتب الدرجة وسيتم الحفظ والانتقال تلقائيًا",13));if(names.isEmpty())root.addView(tv("لا يوجد طلاب. أضف أسماء من Excel أو أضف طالبًا جديدًا.",15));for(String n:new ArrayList<>(names))addStudent(n,locked);root.addView(btn("➕ إضافة طالب",v->addStudentDialog()));root.addView(btn("🗑 حذف طالب",v->deleteStudentDialog()));root.addView(btn("🗑 حذف درجات هذا التقييم للكل",v->deleteAllScoresDialog()));root.addView(btn("⬅ رجوع للفصل",v->open(cls)));}
+    private boolean hasWeekData(String n,String w){return savedScore(n,w,"beh")>0||savedScore(n,w,"hw")>0||savedScore(n,w,"copy")>0||savedScore(n,w,"weekly")>0||isAbsent(n,w);}
+    private boolean isComplete(String n){return hasWeekData(n,week)&&!isAbsent(n,week)&&savedScore(n,week,"hw")>=5&&savedScore(n,week,"copy")>=5&&savedScore(n,week,"weekly")>=10&&savedScore(n,week,"beh")>=5;}
+    private int missingCount(){int c=0;for(String n:names)if(!isComplete(n))c++;return c;}
+    private void assessment(){
+        base("الصف "+grade+" - الفصل "+cls);
+        root.addView(tv("📝 التقييم الأسبوعي",21));
+        TextView date=tv(week+"\n📅 "+dayName(weekDate())+"  "+weekDate(),16);date.setBackground(cardBg());root.addView(date);
+        root.addView(btn("📅 تغيير تاريخ هذا التقييم",v->chooseDate()));
+        Spinner ws=new Spinner(this);ws.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,weeks));ws.setSelection(weekIndex());ws.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> p){}public void onItemSelected(android.widget.AdapterView<?> p,View v,int pos,long id){if(!weeks[pos].equals(week)){week=weeks[pos];assessment();}}});root.addView(ws);
+        LinearLayout nav=new LinearLayout(this);nav.setWeightSum(2);Button prev=btn("⬅ السابق",v->goPreviousWeek());Button next=btn("التالي ➡",v->goNextWeek());prev.setLayoutParams(new LinearLayout.LayoutParams(0,dp(50),1));next.setLayoutParams(new LinearLayout.LayoutParams(0,dp(50),1));nav.addView(prev);nav.addView(next);root.addView(nav);
+        final boolean locked=isWeekLocked();
+        TextView state=tv(locked?"🔒 التقييم مقفول":"✏️ التقييم مفتوح • الحفظ تلقائي",14);state.setTextColor(locked?Color.rgb(190,70,70):Color.rgb(35,130,80));root.addView(state);
+        root.addView(btn(locked?"🔓 فتح التقييم للتعديل":"🔒 قفل التقييم الأسبوعي",v->{if(locked)confirmUnlock();else confirmLock();}));
+        TextView progress=tv("📊 المكتمل: "+(names.size()-missingCount())+" / "+names.size()+"   •   المتبقي: "+missingCount(),14);progress.setBackground(cardBg());root.addView(progress);
+        if(!locked){
+            LinearLayout tools=new LinearLayout(this);tools.setOrientation(LinearLayout.VERTICAL);
+            tools.addView(btn("⚡ التقييم السريع",v->quickMode()));
+            tools.addView(btn("🔎 بحث / فلترة الطلاب",v->showStudentTools()));
+            tools.addView(btn("▶️ استكمال الناقص",v->focusFirstMissing()));
+            tools.addView(btn("📋 نسخ تقييم الأسبوع السابق",v->copyPreviousWeek()));
+            tools.addView(btn("👥 درجة جماعية",v->bulkScoreDialog()));
+            root.addView(tools);
+        }else root.addView(btn("🔎 بحث / فلترة الطلاب",v->showStudentTools()));
+        root.addView(tv("درجات التقييم • اكتب الدرجة وسيتم الحفظ والانتقال تلقائيًا",13));
+        if(names.isEmpty())root.addView(tv("لا يوجد طلاب. أضف أسماء من Excel أو أضف طالبًا جديدًا.",15));
+        for(String n:new ArrayList<>(names))addStudent(n,locked);
+        root.addView(btn("➕ إضافة طالب",v->addStudentDialog()));
+        root.addView(btn("🗑 حذف طالب",v->deleteStudentDialog()));
+        root.addView(btn("🗑 حذف درجات هذا التقييم للكل",v->deleteAllScoresDialog()));
+        root.addView(btn("⬅ رجوع للفصل",v->open(cls)));
+    }
+    private void showStudentTools(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);
+        EditText search=field("اكتب جزءًا من اسم الطالب","");
+        Spinner filter=new Spinner(this);filter.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"الكل","مكتمل","ناقص","غائب"}));
+        box.addView(search);box.addView(filter);
+        new AlertDialog.Builder(this).setTitle("🔎 بحث وفلترة").setView(box).setNegativeButton("إلغاء",null).setPositiveButton("عرض",(d,w)->{String q=search.getText().toString().trim();String f=filter.getSelectedItem().toString();showFiltered(q,f);}).show();
+    }
+    private void showFiltered(String q,String f){
+        base("🔎 نتائج الطلاب");
+        for(String n:names){boolean match=q.isEmpty()||n.toLowerCase(Locale.ROOT).contains(q.toLowerCase(Locale.ROOT));boolean ok=f.equals("الكل")||(f.equals("مكتمل")&&isComplete(n))||(f.equals("ناقص")&&!isComplete(n)&&!isAbsent(n,week))||(f.equals("غائب")&&isAbsent(n,week));if(match&&ok)root.addView(tv("👤 "+n+"   •   "+(isAbsent(n,week)?"غائب":isComplete(n)?"مكتمل":"ناقص"),16));}
+        root.addView(btn("⬅ رجوع للتقييم",v->assessment()));
+    }
+    private void focusFirstMissing(){for(String n:names)if(!isComplete(n)){Toast.makeText(this,"ابدأ من: "+n,Toast.LENGTH_LONG).show();return;}Toast.makeText(this,"🎉 كل الطلاب مكتملون",Toast.LENGTH_SHORT).show();}
+    private void quickMode(){
+        if(names.isEmpty()){Toast.makeText(this,"لا يوجد طلاب",Toast.LENGTH_SHORT).show();return;}
+        ArrayList<String> pending=new ArrayList<>();for(String n:names)if(!isComplete(n))pending.add(n);
+        if(pending.isEmpty()){Toast.makeText(this,"كل الطلاب مكتملون في هذا الأسبوع",Toast.LENGTH_SHORT).show();return;}
+        quickStudent(pending,0);
+    }
+    private void quickStudent(ArrayList<String> list,int index){
+        if(index>=list.size()){assessment();Toast.makeText(this,"تم إنهاء التقييم السريع",Toast.LENGTH_SHORT).show();return;}
+        String n=list.get(index);LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);
+        TextView hint=tv("الطالب "+(index+1)+" من "+list.size()+"\n👤 "+n,18);hint.setBackground(cardBg());box.addView(hint);
+        EditText hw=scoreEdit("واجب /5",5),cp=scoreEdit("كراسة /5",5),we=scoreEdit("تقييم أسبوعي /10",10),be=scoreEdit("سلوك /5",5);
+        loadEdit(hw,savedScore(n,week,"hw"));loadEdit(cp,savedScore(n,week,"copy"));loadEdit(we,savedScore(n,week,"weekly"));loadEdit(be,savedScore(n,week,"beh"));box.addView(hw);box.addView(cp);box.addView(we);box.addView(be);
+        new AlertDialog.Builder(this).setTitle("⚡ التقييم السريع").setView(box).setNegativeButton("إلغاء",null).setPositiveButton(index==list.size()-1?"حفظ وإنهاء":"حفظ والتالي",(d,w)->{saveScore(n,week,"hw",num(hw,5));saveScore(n,week,"copy",num(cp,5));saveScore(n,week,"weekly",num(we,10));saveScore(n,week,"beh",num(be,5));quickStudent(list,index+1);}).show();
+    }
+    private void copyPreviousWeek(){int i=weekIndex();if(i<=0){Toast.makeText(this,"لا يوجد أسبوع سابق",Toast.LENGTH_SHORT).show();return;}String prev=weeks[i-1];new AlertDialog.Builder(this).setTitle("📋 نسخ الأسبوع السابق").setMessage("سيتم نسخ درجات "+prev+" إلى "+week+" للطلاب الذين لديهم درجات سابقة. هل تريد المتابعة؟").setNegativeButton("إلغاء",null).setPositiveButton("نسخ",(d,w)->{for(String n:names){if(hasWeekData(n,prev)&&!hasWeekData(n,week)){saveScore(n,week,"hw",savedScore(n,prev,"hw"));saveScore(n,week,"copy",savedScore(n,prev,"copy"));saveScore(n,week,"weekly",savedScore(n,prev,"weekly"));saveScore(n,week,"beh",savedScore(n,prev,"beh"));saveAbsent(n,week,isAbsent(n,prev));}}assessment();}).show();}
+    private void bulkScoreDialog(){
+        if(names.isEmpty()){Toast.makeText(this,"لا يوجد طلاب",Toast.LENGTH_SHORT).show();return;}
+        String[] parts={"واجب منزلي /5","كراسة الحصة /5","تقييم أسبوعي /10","المواظبة والسلوك /5"};
+        new AlertDialog.Builder(this).setTitle("👥 درجة جماعية").setItems(parts,(d,which)->{final EditText input=field("الدرجة","");input.setInputType(2);int max=which==2?10:5;new AlertDialog.Builder(this).setTitle(parts[which]).setMessage("سيتم تطبيق الدرجة على كل الطلاب. يمكنك استخدام 0 أيضًا.").setView(input).setNegativeButton("إلغاء",null).setPositiveButton("تطبيق",(x,y)->{int v=num(input,max);String key=which==0?"hw":which==1?"copy":which==2?"weekly":"beh";for(String n:names)if(!isAbsent(n,week))saveScore(n,week,key,v);assessment();}).show();}).setNegativeButton("إلغاء",null).show();
+    }
     private void deleteAllScoresDialog(){if(names.isEmpty()){Toast.makeText(this,"لا يوجد طلاب",Toast.LENGTH_SHORT).show();return;}new AlertDialog.Builder(this).setTitle("🗑 حذف درجات التقييم").setMessage("سيتم حذف درجات جميع الطلاب في "+week+" فقط، مع الاحتفاظ بأسماء الطلاب.").setNegativeButton("إلغاء",null).setPositiveButton("حذف الدرجات",(d,w)->{SharedPreferences.Editor e=prefs().edit();for(String n:names){e.remove(scoreKey(n,week,"hw"));e.remove(scoreKey(n,week,"copy"));e.remove(scoreKey(n,week,"weekly"));e.remove(scoreKey(n,week,"beh"));e.remove(absentKey(n,week));}e.apply();Toast.makeText(this,"تم حذف درجات "+week+" للكل",Toast.LENGTH_SHORT).show();assessment();}).show();}
     private void confirmLock(){new AlertDialog.Builder(this).setTitle("🔒 قفل التقييم").setMessage("بعد القفل لن يمكن تعديل درجات هذا الأسبوع. هل تريد القفل؟").setNegativeButton("إلغاء",null).setPositiveButton("قفل",(d,w)->{setWeekLocked(true);Toast.makeText(this,"تم قفل "+week,Toast.LENGTH_SHORT).show();if(weekIndex()<weeks.length-1){week=weeks[weekIndex()+1];assessment();}else assessment();}).show();}
     private void confirmUnlock(){new AlertDialog.Builder(this).setTitle("🔓 فتح التقييم").setMessage("السماح بالتعديل على درجات هذا الأسبوع؟").setNegativeButton("إلغاء",null).setPositiveButton("فتح",(d,w)->{setWeekLocked(false);assessment();}).show();}
     private EditText scoreEdit(String hint,int max){EditText e=new EditText(this);e.setHint(hint);e.setGravity(Gravity.CENTER);e.setInputType(2);e.setTextSize(15);e.setSingleLine(true);e.setImeOptions(EditorInfo.IME_ACTION_NEXT);e.setSelectAllOnFocus(true);e.setFilters(new InputFilter[]{new InputFilter.LengthFilter((max==10||max==15)?2:1)});e.setPadding(dp(2),dp(2),dp(2),dp(2));e.setBackground(cardBg());e.setLayoutParams(new LinearLayout.LayoutParams(0,dp(58),1));return e;}
     private int num(EditText e,int max){try{return Math.max(0,Math.min(max,Integer.parseInt(e.getText().toString())));}catch(Exception x){return 0;}}
     private void loadEdit(EditText e,int v){if(v>0)e.setText(String.valueOf(v));}
-    private void addStudent(String n,boolean locked){LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(8),dp(7),dp(8));card.setBackground(cardBg());TextView name=tv("👤 "+n,16);name.setGravity(Gravity.RIGHT);card.addView(name);CheckBox absent=new CheckBox(this);absent.setText("غائب ✓  (اتركه بدون علامة للحضور)");absent.setChecked(isAbsent(n,week));absent.setEnabled(!locked);card.addView(absent);LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER);row.setWeightSum(5);EditText hw=scoreEdit("واجب منزلي /5",5),copy=scoreEdit("كراسة الحصة /5",5),weekly=scoreEdit("تقييم أسبوعي /10",10),beh=scoreEdit("المواظبة والسلوك /5",5);loadEdit(hw,savedScore(n,week,"hw"));loadEdit(copy,savedScore(n,week,"copy"));loadEdit(weekly,savedScore(n,week,"weekly"));loadEdit(beh,savedScore(n,week,"beh"));TextView total=tv("المجموع\n0 /25",12);total.setBackgroundColor(Color.rgb(238,243,250));total.setLayoutParams(new LinearLayout.LayoutParams(0,dp(58),1));row.addView(hw);row.addView(copy);row.addView(weekly);row.addView(beh);row.addView(total);card.addView(row);if(!locked){EditText[] fields={hw,copy,weekly,beh};String[] parts={"hw","copy","weekly","beh"};TextWatcher watcher=new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){int sum=0;for(int i=0;i<fields.length;i++){int v=num(fields[i],maxFor(parts[i]));saveScore(n,week,parts[i],v);sum+=v;}total.setText("المجموع\n"+sum+" /25");}public void afterTextChanged(Editable e){}};for(EditText e:fields)e.addTextChangedListener(watcher);for(int i=0;i<fields.length;i++)setAutoNext(fields[i],i<fields.length-1?fields[i+1]:null,maxFor(parts[i]));absent.setOnCheckedChangeListener((button,checked)->saveAbsent(n,week,checked));}int initial=savedScore(n,week,"hw")+savedScore(n,week,"copy")+savedScore(n,week,"weekly")+savedScore(n,week,"beh");total.setText("المجموع\n"+initial+" /25");root.addView(card);Space gap=new Space(this);gap.setLayoutParams(new LinearLayout.LayoutParams(1,dp(10)));root.addView(gap);}
-    private void setAutoNext(EditText current,EditText next,int max){
-    current.setOnEditorActionListener((v,action,event)->{
-        if(action==EditorInfo.IME_ACTION_NEXT){
-            if(next!=null){next.requestFocus();next.selectAll();}
-            else current.clearFocus();
-            return true;
-        }
-        return false;
-    });
-    current.addTextChangedListener(new TextWatcher(){
-        boolean scheduled=false;
-        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
-        public void onTextChanged(CharSequence s,int a,int b,int c){
-            if(scheduled||next==null||s.length()==0)return;
-            int value=num(current,max);
-            boolean complete = max<=9 ? value>=max : (s.length()>=2 && value>=10);
-            if(!complete)return;
-            scheduled=true;
-            handler.postDelayed(()->{
-                scheduled=false;
-                if(current.hasFocus()&&next!=null){next.requestFocus();next.selectAll();}
-            },500);
-        }
-        public void afterTextChanged(Editable e){}
-    });
-}
-private boolean hasWeekData(String n,String w){return savedScore(n,w,"beh")>0||savedScore(n,w,"hw")>0||savedScore(n,w,"copy")>0||savedScore(n,w,"weekly")>0||isAbsent(n,w);}
+    private void addStudent(String n,boolean locked){LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(8),dp(7),dp(8));card.setBackground(cardBg());TextView name=tv("👤 "+n,16);name.setGravity(Gravity.RIGHT);card.addView(name);CheckBox absent=new CheckBox(this);absent.setText("غائب ✓  (اتركه بدون علامة للحضور)");absent.setChecked(isAbsent(n,week));absent.setEnabled(!locked);card.addView(absent);LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER);row.setWeightSum(5);EditText hw=scoreEdit("واجب منزلي /5",5),copy=scoreEdit("كراسة الحصة /5",5),weekly=scoreEdit("تقييم أسبوعي /10",10),beh=scoreEdit("المواظبة والسلوك /5",5);loadEdit(hw,savedScore(n,week,"hw"));loadEdit(copy,savedScore(n,week,"copy"));loadEdit(weekly,savedScore(n,week,"weekly"));loadEdit(beh,savedScore(n,week,"beh"));hw.setEnabled(!locked);copy.setEnabled(!locked);weekly.setEnabled(!locked);beh.setEnabled(!locked);TextView total=tv("المجموع\n0 /25",12);total.setBackgroundColor(Color.rgb(238,243,250));total.setLayoutParams(new LinearLayout.LayoutParams(0,dp(58),1));row.addView(hw);row.addView(copy);row.addView(weekly);row.addView(beh);row.addView(total);card.addView(row);if(!locked){EditText[] fields={hw,copy,weekly,beh};String[] parts={"hw","copy","weekly","beh"};TextWatcher watcher=new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){int sum=0;for(int i=0;i<fields.length;i++){int v=num(fields[i],maxFor(parts[i]));saveScore(n,week,parts[i],v);sum+=v;}total.setText("المجموع\n"+sum+" /25");}public void afterTextChanged(Editable e){}};for(EditText e:fields)e.addTextChangedListener(watcher);for(int i=0;i<fields.length;i++)setAutoNext(fields[i],i<fields.length-1?fields[i+1]:null,i<fields.length-1?maxFor(parts[i]):maxFor(parts[i]));absent.setOnCheckedChangeListener((button,checked)->saveAbsent(n,week,checked));}int initial=savedScore(n,week,"hw")+savedScore(n,week,"copy")+savedScore(n,week,"weekly")+savedScore(n,week,"beh");total.setText("المجموع\n"+initial+" /25");root.addView(card);Space gap=new Space(this);gap.setLayoutParams(new LinearLayout.LayoutParams(1,dp(10)));root.addView(gap);}
+    private void setAutoNext(EditText current,EditText next,int max){current.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_NEXT){if(next!=null){next.requestFocus();next.selectAll();}else current.clearFocus();return true;}return false;});current.addTextChangedListener(new TextWatcher(){boolean scheduled=false;public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){if(scheduled||next==null||s.length()==0)return;int value=num(current,max);boolean complete=max<=9?value>=max:(s.length()>=2&&value>=10);if(!complete)return;scheduled=true;handler.postDelayed(()->{scheduled=false;if(current.hasFocus()&&next!=null){next.requestFocus();next.selectAll();}},350);}public void afterTextChanged(Editable e){}});}
     private String fmt(double x){return x==Math.rint(x)?String.valueOf((int)x):String.format(Locale.US,"%.1f",x);}
     private void monthly(){base("📊 التقييم الشهري والاختبارات");root.addView(tv("الصف "+grade+" - الفصل "+cls,18));root.addView(tv("الاختبار الأول /15 • الاختبار الثاني /15 • المتوسط /15 • التقييمات /25 • الإجمالي /40",13));if(names.isEmpty())load();for(String n:names)addMonthlyStudent(n);root.addView(btn("🗑 حذف درجات الاختبارات للكل",v->deleteAllExamScoresDialog()));root.addView(btn("⬅ رجوع",v->open(cls)));}
     private String examKey(String n,int which){return "exam"+which+"_"+grade+"_"+cls+"_"+n.hashCode();}
