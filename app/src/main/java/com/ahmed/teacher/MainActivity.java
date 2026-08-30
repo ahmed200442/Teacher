@@ -70,8 +70,33 @@ public class MainActivity extends Activity {
     private int num(EditText e,int max){try{return Math.max(0,Math.min(max,Integer.parseInt(e.getText().toString())));}catch(Exception x){return 0;}}
     private void loadEdit(EditText e,int v){if(v>0)e.setText(String.valueOf(v));}
     private void addStudent(String n,boolean locked){LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(7),dp(8),dp(7),dp(8));card.setBackground(cardBg());TextView name=tv("👤 "+n,16);name.setGravity(Gravity.RIGHT);card.addView(name);CheckBox absent=new CheckBox(this);absent.setText("غائب ✓  (اتركه بدون علامة للحضور)");absent.setChecked(isAbsent(n,week));absent.setEnabled(!locked);card.addView(absent);LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER);row.setWeightSum(5);EditText hw=scoreEdit("واجب منزلي /5",5),copy=scoreEdit("كراسة الحصة /5",5),weekly=scoreEdit("تقييم أسبوعي /10",10),beh=scoreEdit("المواظبة والسلوك /5",5);loadEdit(hw,savedScore(n,week,"hw"));loadEdit(copy,savedScore(n,week,"copy"));loadEdit(weekly,savedScore(n,week,"weekly"));loadEdit(beh,savedScore(n,week,"beh"));TextView total=tv("المجموع\n0 /25",12);total.setBackgroundColor(Color.rgb(238,243,250));total.setLayoutParams(new LinearLayout.LayoutParams(0,dp(58),1));row.addView(hw);row.addView(copy);row.addView(weekly);row.addView(beh);row.addView(total);card.addView(row);if(!locked){EditText[] fields={hw,copy,weekly,beh};String[] parts={"hw","copy","weekly","beh"};TextWatcher watcher=new TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){int sum=0;for(int i=0;i<fields.length;i++){int v=num(fields[i],maxFor(parts[i]));saveScore(n,week,parts[i],v);sum+=v;}total.setText("المجموع\n"+sum+" /25");}public void afterTextChanged(Editable e){}};for(EditText e:fields)e.addTextChangedListener(watcher);for(int i=0;i<fields.length;i++)setAutoNext(fields[i],i<fields.length-1?fields[i+1]:null,maxFor(parts[i]));absent.setOnCheckedChangeListener((button,checked)->saveAbsent(n,week,checked));}int initial=savedScore(n,week,"hw")+savedScore(n,week,"copy")+savedScore(n,week,"weekly")+savedScore(n,week,"beh");total.setText("المجموع\n"+initial+" /25");root.addView(card);Space gap=new Space(this);gap.setLayoutParams(new LinearLayout.LayoutParams(1,dp(10)));root.addView(gap);}
-    private void setAutoNext(EditText current,EditText next,int max){current.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_NEXT){if(next!=null){next.requestFocus();next.selectAll();}else current.clearFocus();return true;}return false;});current.addTextChangedListener(new TextWatcher(){boolean scheduled=false;public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){if(scheduled||s.length()==0)return;if(max==5||s.length()>=2){scheduled=true;handler.postDelayed(()->{scheduled=false;if(current.hasFocus()&&next!=null){next.requestFocus();next.selectAll();}},250);}}public void afterTextChanged(Editable e){}});}
-    private boolean hasWeekData(String n,String w){return savedScore(n,w,"beh")>0||savedScore(n,w,"hw")>0||savedScore(n,w,"copy")>0||savedScore(n,w,"weekly")>0||isAbsent(n,w);}
+    private void setAutoNext(EditText current,EditText next,int max){
+    current.setOnEditorActionListener((v,action,event)->{
+        if(action==EditorInfo.IME_ACTION_NEXT){
+            if(next!=null){next.requestFocus();next.selectAll();}
+            else current.clearFocus();
+            return true;
+        }
+        return false;
+    });
+    current.addTextChangedListener(new TextWatcher(){
+        boolean scheduled=false;
+        public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+        public void onTextChanged(CharSequence s,int a,int b,int c){
+            if(scheduled||next==null||s.length()==0)return;
+            int value=num(current,max);
+            boolean complete = max<=9 ? value>=max : (s.length()>=2 && value>=10);
+            if(!complete)return;
+            scheduled=true;
+            handler.postDelayed(()->{
+                scheduled=false;
+                if(current.hasFocus()&&next!=null){next.requestFocus();next.selectAll();}
+            },500);
+        }
+        public void afterTextChanged(Editable e){}
+    });
+}
+private boolean hasWeekData(String n,String w){return savedScore(n,w,"beh")>0||savedScore(n,w,"hw")>0||savedScore(n,w,"copy")>0||savedScore(n,w,"weekly")>0||isAbsent(n,w);}
     private String fmt(double x){return x==Math.rint(x)?String.valueOf((int)x):String.format(Locale.US,"%.1f",x);}
     private void monthly(){base("📊 التقييم الشهري والاختبارات");root.addView(tv("الصف "+grade+" - الفصل "+cls,18));root.addView(tv("الاختبار الأول /15 • الاختبار الثاني /15 • المتوسط /15 • التقييمات /25 • الإجمالي /40",13));if(names.isEmpty())load();for(String n:names)addMonthlyStudent(n);root.addView(btn("🗑 حذف درجات الاختبارات للكل",v->deleteAllExamScoresDialog()));root.addView(btn("⬅ رجوع",v->open(cls)));}
     private String examKey(String n,int which){return "exam"+which+"_"+grade+"_"+cls+"_"+n.hashCode();}
