@@ -11,6 +11,10 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: >-
+        -Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1536m -Dfile.encoding=UTF-8
+        -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,9 +33,14 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build debug APK
+      - name: Build debug APK with low parallelism
         run: |
-          gradle clean assembleDebug --no-daemon --stacktrace --console=plain
+          gradle assembleDebug --no-daemon --max-workers=1 --stacktrace --console=plain
+
+      - name: Verify APK exists
+        run: |
+          test -s app/build/outputs/apk/debug/*.apk
+          ls -lh app/build/outputs/apk/debug/*.apk
 
       - name: Upload APK
         if: success()
