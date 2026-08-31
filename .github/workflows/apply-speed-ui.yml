@@ -21,7 +21,6 @@ jobs:
           s = p.read_text(encoding='utf-8')
           s = s.replace('الحد المقترح 50+ طالب', 'الحد الأقصى 55 طالب')
           s = s.replace('a.setLayoutParams(new LinearLayout.LayoutParams(dp(120),dp(62)));b.setLayoutParams(new LinearLayout.LayoutParams(dp(120),dp(62)));', 'a.setLayoutParams(new LinearLayout.LayoutParams(dp(72),dp(62)));b.setLayoutParams(new LinearLayout.LayoutParams(dp(72),dp(62)));')
-          s = s.replace('private void home(){base("📚 سجل المعلم");', 'private void home(){base("📚 سجل المعلم");')
           marker = 'private void schoolData(){'
           if 'private void preparation(){' not in s:
               methods = '''private void preparation(){base("📚 التحضير وتلخيص المنهج");root.addView(tv("إدراج التحضير وتلخيص المنهج من ملفات PDF",17));root.addView(btn("📥 إدراج ملف PDF للتحضير",v->pickPdf("prep")));root.addView(btn("📚 إدراج ملف PDF لتلخيص المنهج",v->pickPdf("summary")));root.addView(tv("الملفات المضافة محفوظة محليًا داخل التطبيق.",13));root.addView(btn("⬅ رجوع",v->home()));}\n    private void weeklyPdf(){base("📋 التقييمات الأسبوعية من PDF");root.addView(tv("إدراج التقييمات الأسبوعية من ملف PDF",17));root.addView(btn("📥 إدراج ملف PDF للتقييمات",v->pickPdf("weekly")));root.addView(tv("يمكنك الاحتفاظ بملفات التقييمات للرجوع إليها أثناء العمل.",13));root.addView(btn("⬅ رجوع",v->home()));}\n    private void pickPdf(String type){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i, type.equals("prep")?202:type.equals("summary")?203:204);}\n    '''
@@ -37,5 +36,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/src/main/java/com/ahmed/teacher/MainActivity.java
           git diff --cached --quiet && exit 0
-          git commit -m 'Apply assessment UI updates [skip ci]'
+          git commit -m 'Apply assessment UI updates'
           git push
